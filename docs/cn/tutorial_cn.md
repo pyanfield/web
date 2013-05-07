@@ -168,7 +168,7 @@ Web.go 能很高效的实现静态文件的服务。 如果你将文件放到你
 
 比如，你有一个web应用，网络地址是 myapp.com，在服务器上的路径是 $HOME/app. 在你的服务器路径 $HOME/app/static 下有图片image.jpg.那么当你请求 myapp.com/image.jpg的时候，应用程序就会去调用服务器上的$HOME/app/static/image.jpg 文件。一种通用的做法是在你的这个 static路径下建立诸如 static/images, static/sylesheets 和 static/javascripts 等文件夹来存放你的静态文件。
 
-注意，web.go 会同时在你的应用程序的 static 路径和你当前的工作路径下查找静态文件。 你也可以设置 `web.ServerConfig.StaticDir` 来指定一个特殊的目录为静态文件目录。
+注意，web.go 会同时在你的应用程序(生成的执行文件)的 static 路径和你当前的工作路径(当前项目代码路径)下查找静态文件。 你也可以设置 `web.ServerConfig.StaticDir` 来指定一个特殊的目录为静态文件目录。
 
 ###共享主机(Shared hosts)
 ---
