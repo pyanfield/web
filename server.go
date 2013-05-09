@@ -18,25 +18,25 @@ import (
 )
 
 // ServerConfig is configuration for server objects.
-// ServerConfig 结构体定义了一些服务器的配置信息，比如：静态文件路径，地址，端口，cookie安全验证等等
+// ServerConfig 结构体定义了一些服务器的配置信息
 type ServerConfig struct {
-	StaticDir    string
-	Addr         string
-	Port         int
-	CookieSecret string
+	StaticDir    string // 静态文件夹路径
+	Addr         string // 服务地址
+	Port         int    // 服务端口号
+	CookieSecret string // cookie 安全验证
 	RecoverPanic bool
-	Profiler     bool
+	Profiler     bool // 是否进行代码的性能测试
 }
 
 // Server represents a web.go server.
-// Server 结构体描述了 web.go 的服务器信息，包括服务器的配置信息，路由，log，环境信息，还有一个监听器
+// Server 结构体描述了 web.go 的服务器信息
 type Server struct {
-	Config *ServerConfig
-	routes []route
+	Config *ServerConfig // 服务器的配置信息
+	routes []route       // 路由
 	Logger *log.Logger
 	Env    map[string]interface{}
 	//save the listener so it can be closed
-	l net.Listener
+	l net.Listener // 网络监听器
 }
 
 // 创建一个新的 Server 对象，定义 Config, Logger 和 Env 信息。
@@ -50,6 +50,7 @@ func NewServer() *Server {
 	}
 }
 
+// 设置 Server 的 Config 和 Logger 的默认值，如果没有设置就用用默认值代替。
 func (s *Server) initServer() {
 	if s.Config == nil {
 		s.Config = &ServerConfig{}
@@ -60,12 +61,12 @@ func (s *Server) initServer() {
 	}
 }
 
-// 路由信息，包含了HTTP请求的地址,路由的正则表达式对象， HTTP 方法名，还有就是处理函数的值
+// 路由信息
 type route struct {
-	r       string
-	cr      *regexp.Regexp
-	method  string
-	handler reflect.Value
+	r       string         // HTTP 请求的地址
+	cr      *regexp.Regexp // 路由的正则表达式对象
+	method  string         // HTTP 请求的方法
+	handler reflect.Value  // 处理函数的值
 }
 
 // 为不同的请求添加路由功能，根据不同的请求去响应不同的处理方法
@@ -76,29 +77,34 @@ func (s *Server) addRoute(r string, method string, handler interface{}) {
 		s.Logger.Printf("Error in route regex %q\n", r)
 		return
 	}
-
-	// 因为是 handler 是interface{} 类型，所以，如果 handler 能够转化成 reflect.Value 的话，
-	// 那么就直接讲这个值添加到 routes 里。
+	// 检测 handler 是否能够直接转换成 reflect.Value 类型
+	// 这里有个判断是因为如果直接对 handler 进行类型转换的话，那么转换失败将产生错误。
+	// 所以如果能直接转换，那么就直接转换并保存至 fv,添加到 routes 里。
+	// 如果不能就使用 reflect.ValueOf 来获取handler 的 Value 值
+	// 这里的 handler.() 这种写法是对 interface{} 对象做类型推断，如果括号中是一个 interface 类型的话，
+	// 那么这里做类型推断的时候即使推断出没有实现该借口，也不会产生错误，但是如果括号中是一个数据类型的话，
+	// 比如 struct 类型的话，那么类型推断失败，就会产生错误。
 	if fv, ok := handler.(reflect.Value); ok {
 		s.routes = append(s.routes, route{r, cr, method, fv})
 	} else {
-		// 在 Get 方法中会执行到这里，获取 handler 方法的 Value 值
+		// 获取 handler 方法的 Value 值
 		// 比如我们的 handler 是这样的一个函数 func hello(val string) string
 		// 那么这个地方 fv 就会返回 <func(string) string Value>
-		// 注意 ValueOf(pointer-interface) 返回的是⼀一个 Pointer,也就是接⼝口对象保存的 *data 内容.
-		// 要 想操作⺫⽬目标对象,需要⽤用 Elem() 进⼀一步获取指针指向的实际⺫⽬目标。
+		// 注意 ValueOf(pointer-interface) 返回的是⼀个 Pointer,也就是接口对象保存的 *data 内容.
+		// 要 想操作目标对象,需要⽤用 Elem() 进⼀一步获取指针指向的实际目标。
 		fv := reflect.ValueOf(handler)
-		fmt.Println("fv:", fv)
 		s.routes = append(s.routes, route{r, cr, method, fv})
 	}
 }
 
 // ServeHTTP is the interface method for Go's http server package
+// 经过 func (s *Server) Run(addr string) 一系列调用之后，调用到这里
 func (s *Server) ServeHTTP(c http.ResponseWriter, req *http.Request) {
 	s.Process(c, req)
 }
 
 // Process invokes the routing system for server s
+// 调用路由处理方法
 func (s *Server) Process(c http.ResponseWriter, req *http.Request) {
 	s.routeHandler(req, c)
 }
@@ -129,9 +135,20 @@ func (s *Server) Match(method string, route string, handler interface{}) {
 }
 
 // Run starts the web application and serves HTTP requests for s
+// 开始运行 server，并且去响应 HTTP 的请求
+// 这个地方可以对应 Go 的net/http包下的server.go文件来看
 func (s *Server) Run(addr string) {
+	// 初始化 Server
 	s.initServer()
-
+	// 创建一个 ServeMux 对象，其中 ServeMux 是一个HTTP请求的多路转换器。
+	// type ServeMux struct {
+	//    	mu sync.RWMutex   		//锁，由于请求涉及到并发处理，因此这里需要一个锁机制
+	//    	m  map[string]muxEntry  // 路由规则，一个string对应一个mux实体，这里的string就是注册的路由表达式
+	// }
+	// 	type muxEntry struct {
+	//     explicit bool   			// 是否精确匹配
+	//     h        Handler 		// 这个路由表达式对应哪个handler
+	// }
 	mux := http.NewServeMux()
 	if s.Config.Profiler {
 		mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
@@ -139,16 +156,83 @@ func (s *Server) Run(addr string) {
 		mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
 		mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
 	}
+	// Handle registers the handler for the given pattern.
+	// If a handler already exists for pattern, Handle panics.
+	// 将我们创建的 Server 对象 s 注册到模型 "/" 中
+	// 向 ServeMux的map[string]muxEntry中增加对应的handler和路由规则
+	// func (mux *ServeMux) Handle(pattern string, handler Handler)
+	// 我们的的 Server 对象 s 实现了 Handler 的 ServeHTTP 方法
+	// ServeMux{mu:sync.RWMutex, m:{"/":{explicit:true, h:s}}}
+	// mux.m["/"] = muxEntry{explicit:true, h:s}
 	mux.Handle("/", s)
 
 	s.Logger.Printf("web.go serving %s\n", addr)
-
+	// 用 TCP 协议搭建一个服务，然后监听设置的端口
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal("ListenAndServe:", err)
 	}
 	s.l = l
+	// Serve accepts incoming HTTP connections on the listener l,
+	// creating a new service thread for each.  The service threads
+	// read requests and then call handler to reply to them.
+	// Handler is typically nil, in which case the DefaultServeMux is used.
+	// 参见 $GOROOT/src/pkg/net/http/server.go
+	// func Serve(l net.Listener, handler Handler) error {
+	// 		srv := &Server{Handler: handler}
+	// 		return srv.Serve(l)
+	// }
+	/*
+		func (srv *Server) Serve(l net.Listener) error {
+			defer l.Close()
+			var tempDelay time.Duration // how long to sleep on accept failure
+			for {
+				rw, e := l.Accept()        // (c Conn, err error) 返回的是一个 Conn对象
+				if e != nil {
+					if ne, ok := e.(net.Error); ok && ne.Temporary() {
+						if tempDelay == 0 {
+							tempDelay = 5 * time.Millisecond
+						} else {
+							tempDelay *= 2
+						}
+						if max := 1 * time.Second; tempDelay > max {
+							tempDelay = max
+						}
+						log.Printf("http: Accept error: %v; retrying in %v", e, tempDelay)
+						time.Sleep(tempDelay)
+						continue
+					}
+					return e
+				}
+				tempDelay = 0
+				if srv.ReadTimeout != 0 {
+					rw.SetReadDeadline(time.Now().Add(srv.ReadTimeout))
+				}
+				if srv.WriteTimeout != 0 {
+					rw.SetWriteDeadline(time.Now().Add(srv.WriteTimeout))
+				}
+				// // A conn represents the server side of an HTTP connection.
+				// func (srv *Server) newConn(rwc net.Conn) (c *conn, err error)
+				c, err := srv.newConn(rw)
+				if err != nil {
+					continue
+				}
+				// // Serve a new connection.
+				go c.serve()
+			}
+			panic("not reached")
+		}
+	*/
+	// 在 Serve 中完成了如下工作：
+	// 启动一个for循环，在循环体中监听是否Accept请求
+	// 如果监听到请求通过了，实例化一个Conn，并且开启一个goroutine为这个请求进行服务go c.serve()
+	// 在 conn 的 serve 里面，读取每个请求的内容w, err := c.readRequest()
+	// 判断c.server.Handler是否为空，如果没有设置handler（我们这里使用的是web.go 的 Server），handler就设置为DefaultServeMux
+	// 调用handler的ServeHttp，这里即调用 func (s *Server) ServeHTTP(c http.ResponseWriter, req *http.Request)
+	// 根据request选择handler，并且进入到这个handler的ServeHTTP
+	// 判断是否有路由能满足这个request（循环遍历ServerMux的muxEntry）的 handler
 	err = http.Serve(s.l, mux)
+	// TODO:为啥还要 Close 一边，在 srv.Serve(l) 里面已经有一个 defer l.Close() 了
 	s.l.Close()
 }
 
@@ -262,13 +346,24 @@ func (s *Server) tryServingFile(name string, req *http.Request, w http.ResponseW
 // the main route handler in web.go
 func (s *Server) routeHandler(req *http.Request, w http.ResponseWriter) {
 	requestPath := req.URL.Path
+	// web.go 中定义了 Context 结构体
 	ctx := Context{req, map[string]string{}, s, w}
 
 	//log the request
 	var logEntry bytes.Buffer
-	fmt.Fprintf(&logEntry, "\033[32;1m%s %s\033[0m", req.Method, requestPath)
+	// 设置文本终端的显示样式和显示内容
+	// “\033”引导非常规字符序列
+	// “m”意味着设置属性然后结束非常规字符序列
+	// 32 设置绿色前景
+	// 1 设置粗体
+	// 0 重新设置属性到缺省设置
+	// 31 设置红色前景
+	fmt.Fprintf(&logEntry, "\033[31;1m%s %s\033[0m", req.Method, requestPath)
 
 	//ignore errors from ParseForm because it's usually harmless.
+	// 解析HTTP请求的参数，包括URL中query-string、POST的数据、PUT的数据
+	// 会将解析的数据保存到 req.Form 里面，
+	// 可以通过 req.Form["name"] 或者 req.FormValue("name")，来获得特定参数的值
 	req.ParseForm()
 	if len(req.Form) > 0 {
 		for k, v := range req.Form {

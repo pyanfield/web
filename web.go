@@ -45,9 +45,10 @@ import (
 // about the request, including the http.Request object, the GET and POST params,
 // and acts as a Writer for the response.
 type Context struct {
-	Request *http.Request
-	Params  map[string]string
-	Server  *Server
+	Request *http.Request     // HTTP 请求
+	Params  map[string]string // 参数列表
+	Server  *Server           // Server
+	// 这个接口主要用于 HTTP 处理函数去构造 HTTP 的响应
 	http.ResponseWriter
 }
 
@@ -217,6 +218,7 @@ func Process(c http.ResponseWriter, req *http.Request) {
 }
 
 // Run starts the web application and serves HTTP requests for the main server.
+// 运行服务器  web.Run("0.0.0.0:9999")
 func Run(addr string) {
 	mainServer.Run(addr)
 }
@@ -243,6 +245,7 @@ func Close() {
 
 // Get adds a handler for the 'GET' http method in the main server.
 // 为 HTTP GET 方法添加一个处理程序，这里封装了 miniServer 的 Get 方法，参见 server.go 中的 Get 方法
+// web.Get("/(.*)", hello)
 func Get(route string, handler interface{}) {
 	mainServer.Get(route, handler)
 }
