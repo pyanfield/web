@@ -44,6 +44,7 @@ import (
 // passed to handlers as an optional first argument. It provides information
 // about the request, including the http.Request object, the GET and POST params,
 // and acts as a Writer for the response.
+// 每一个 HTTP 的请求都会创建一个 Context 对象，它可以作为处理函数的第一个可选参数
 type Context struct {
 	Request *http.Request     // HTTP 请求
 	Params  map[string]string // 参数列表
@@ -61,6 +62,7 @@ func (ctx *Context) WriteString(content string) {
 // body. It is useful for returning 4xx or 5xx errors.
 // Once it has been called, any return value from the handler will
 // not be written to the response.
+// 返回错误信息，主要是针对 4xx 和 5xx 错误码的处理。
 func (ctx *Context) Abort(status int, body string) {
 	ctx.ResponseWriter.WriteHeader(status)
 	ctx.ResponseWriter.Write([]byte(body))
@@ -107,6 +109,8 @@ func (ctx *Context) ContentType(val string) string {
 
 // SetHeader sets a response header. If `unique` is true, the current value
 // of that header will be overwritten . If false, it will be appended.
+// 设置响应头， 如果 unique 为 true 的话，那么当前的值将会被覆盖
+// 如果为 false ，那么将添加现在的值到当前的值之后
 func (ctx *Context) SetHeader(hdr string, val string, unique bool) {
 	if unique {
 		ctx.Header().Set(hdr, val)

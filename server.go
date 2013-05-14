@@ -274,8 +274,13 @@ func (s *Server) Close() {
 
 // safelyCall invokes `function` in recover block
 func (s *Server) safelyCall(function reflect.Value, args []reflect.Value) (resp []reflect.Value, e interface{}) {
+	// Go 没有 try ... catch ... finally 这种结构化异常处理,⽽是⽤ panic 代替 throw/raise 引发错误,然
+	// 后在 defer 中⽤用 recover 函数捕获错误。
+	// 如果不使⽤ recover 捕获,则 panic 沿着 "调⽤堆栈 (call stack)" 向外层传递。
+	// recover 仅在 defer 函数中使⽤才会终⽌错误,此时函数执⾏流程已经中断,⽆无法像 catch 那样恢复到后续位置继续执⾏。
 	defer func() {
 		if err := recover(); err != nil {
+			// 如果我们在配置文件中定义了 RecoverPanic 为false 的话，那么就直接抛出异常
 			if !s.Config.RecoverPanic {
 				// go back to panic
 				panic(err)
@@ -284,6 +289,7 @@ func (s *Server) safelyCall(function reflect.Value, args []reflect.Value) (resp 
 				resp = nil
 				s.Logger.Println("Handler crashed with error", err)
 				for i := 1; ; i += 1 {
+					// 获取当前的调用栈信息
 					_, file, line, ok := runtime.Caller(i)
 					if !ok {
 						break
@@ -298,13 +304,17 @@ func (s *Server) safelyCall(function reflect.Value, args []reflect.Value) (resp 
 
 // requiresContext determines whether 'handlerType' contains
 // an argument to 'web.Ctx' as its first argument
+// 检测处理函数第一个参数是否是 web.Ctx 类型，如果是web.Ctx的话，那么返回true
+// 否则返回 false
 func requiresContext(handlerType reflect.Type) bool {
 	//if the method doesn't take arguments, no
+	// 如果没有输入参数
 	if handlerType.NumIn() == 0 {
 		return false
 	}
 
 	//if the first argument is not a pointer, no
+	// 检测传入的第一个参数是否为指针
 	a0 := handlerType.In(0)
 	if a0.Kind() != reflect.Ptr {
 		return false
@@ -323,8 +333,12 @@ func requiresContext(handlerType reflect.Type) bool {
 // 1) Config.StaticDir
 // 2) The 'static' directory in the parent directory of the executable.
 // 3) The 'static' directory in the current working directory
+// 检查是否是有静态文件，如果是静态文件返回 true,否则返回 false
+// 首先会检查是否自定义了静态文件夹，如果没有就去当前执行程序的父文件夹和当前工作目录下是否有 static 文件夹
+// 如果检查到了该文件在里面，就调用静态文件服务，并且返回true.
 func (s *Server) tryServingFile(name string, req *http.Request, w http.ResponseWriter) bool {
 	//try to serve a static file
+	// 检测我们是否在 Config 重新设置了 static 的文件夹路径
 	if s.Config.StaticDir != "" {
 		staticFile := path.Join(s.Config.StaticDir, name)
 		if fileExists(staticFile) {
@@ -360,11 +374,12 @@ func (s *Server) routeHandler(req *http.Request, w http.ResponseWriter) {
 	// 31 设置红色前景
 	fmt.Fprintf(&logEntry, "\033[31;1m%s %s\033[0m", req.Method, requestPath)
 
-	//ignore errors from ParseForm because it's usually harmless.
+	// ignore errors from ParseForm because it's usually harmless.
 	// 解析HTTP请求的参数，包括URL中query-string、POST的数据、PUT的数据
 	// 会将解析的数据保存到 req.Form 里面，
 	// 可以通过 req.Form["name"] 或者 req.FormValue("name")，来获得特定参数的值
 	req.ParseForm()
+	// 将解析后得到的 req.Form 数据保存到 Context 的 Params 里
 	if len(req.Form) > 0 {
 		for k, v := range req.Form {
 			ctx.Params[k] = v[0]
@@ -374,10 +389,14 @@ func (s *Server) routeHandler(req *http.Request, w http.ResponseWriter) {
 	ctx.Server.Logger.Print(logEntry.String())
 
 	//set some default headers
+	// 设置一些响应的头信息
 	ctx.SetHeader("Server", "web.go", true)
 	tm := time.Now().UTC()
+	// webTime 返回的是以 GMT 结尾的时间格式
 	ctx.SetHeader("Date", webTime(tm), true)
 
+	// 如果请求方法是 GET 或者 HEAD,先去检测是否请求的是静态文件，如果是就直接启用静态文件服务，并且返回
+	// 如果没有检测到相应的静态文件，那么继续
 	if req.Method == "GET" || req.Method == "HEAD" {
 		if s.tryServingFile(requestPath, req, w) {
 			return
@@ -391,33 +410,46 @@ func (s *Server) routeHandler(req *http.Request, w http.ResponseWriter) {
 		route := s.routes[i]
 		cr := route.cr
 		//if the methods don't match, skip this handler (except HEAD can be used in place of GET)
+		// 请求方法如果不匹配就直接跳过本次循环
 		if req.Method != route.method && !(req.Method == "HEAD" && route.method == "GET") {
 			continue
 		}
 
+		// 如果请求的地址不匹配，那么就直接跳过本次循环
 		if !cr.MatchString(requestPath) {
 			continue
 		}
+		// 查找匹配的地址，这里指的是去查找第一个匹配的地址，包括子匹配项。如下：
+		// r, _ := regexp.Compile("p([a-z]+)ch")
+		// fmt.Println(r.FindStringSubmatch("peach punch"))   //[peach ea]
+		// 在 peach 和 punch中第一个和正则表达式匹配的字符串，还有匹配其子表达式的部分
 		match := cr.FindStringSubmatch(requestPath)
 
+		// 如果和我们的请求地址长度不等，直接跳过本次循环
 		if len(match[0]) != len(requestPath) {
 			continue
 		}
 
 		var args []reflect.Value
 		handlerType := route.handler.Type()
+		// 如果我们的处理函数第一个参数是 web.Ctx 类型的话，将其加入到参数集里
 		if requiresContext(handlerType) {
 			args = append(args, reflect.ValueOf(&ctx))
 		}
+		// TODO:
 		for _, arg := range match[1:] {
 			args = append(args, reflect.ValueOf(arg))
 		}
 
+		// 将参数传递给处理函数，并调用处理函数，在这里对异常进行了处理
 		ret, err := s.safelyCall(route.handler, args)
 		if err != nil {
 			//there was an error or panic while calling the handler
+			// 如果抛出了异常，则显示错误
 			ctx.Abort(500, "Server Error")
 		}
+
+		// 如果处理函数没有返回值，直接跳过本次循环
 		if len(ret) == 0 {
 			return
 		}
@@ -431,6 +463,8 @@ func (s *Server) routeHandler(req *http.Request, w http.ResponseWriter) {
 		} else if sval.Kind() == reflect.Slice && sval.Type().Elem().Kind() == reflect.Uint8 {
 			content = sval.Interface().([]byte)
 		}
+		// Itoa 是 FormatInt(i, 10)
+		// 计算返回值的长度，然后将长度信息传递给响应头
 		ctx.SetHeader("Content-Length", strconv.Itoa(len(content)), true)
 		_, err = ctx.ResponseWriter.Write(content)
 		if err != nil {
@@ -440,6 +474,7 @@ func (s *Server) routeHandler(req *http.Request, w http.ResponseWriter) {
 	}
 
 	// try serving index.html or index.htm
+	// 如果没有找到匹配的路由，那么就去调用静态路径下的 index.html 或者 index.htm 页面
 	if req.Method == "GET" || req.Method == "HEAD" {
 		if s.tryServingFile(path.Join(requestPath, "index.html"), req, w) {
 			return
@@ -447,6 +482,7 @@ func (s *Server) routeHandler(req *http.Request, w http.ResponseWriter) {
 			return
 		}
 	}
+	// 如果 index.html 或者 index.htm 静态文件都没有找到的话，那么就返回 404 错误
 	ctx.Abort(404, "Page not found")
 }
 
