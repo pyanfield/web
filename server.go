@@ -251,10 +251,13 @@ func (s *Server) RunScgi(addr string) {
 }
 
 // RunTLS starts the web application and serves HTTPS requests for s.
+// 运行服务器，响应 HTTPS 的请求
 func (s *Server) RunTLS(addr string, config *tls.Config) error {
 	s.initServer()
 	mux := http.NewServeMux()
 	mux.Handle("/", s)
+	// 监听 addr 地址的链接状况，config 必须不能为 nil,而且必须至少有一个 certificate
+	// 在 HTTP 的请求方式下，l, err := net.Listen("tcp", addr)
 	l, err := tls.Listen("tcp", addr, config)
 	if err != nil {
 		log.Fatal("Listen:", err)
@@ -266,6 +269,7 @@ func (s *Server) RunTLS(addr string, config *tls.Config) error {
 }
 
 // Close stops server s.
+// 关闭服务
 func (s *Server) Close() {
 	if s.l != nil {
 		s.l.Close()

@@ -23,7 +23,9 @@ func webTime(t time.Time) string {
 	return ftime
 }
 
+// 判断文件夹是否存在
 func dirExists(dir string) bool {
+	// os.Stat 返回(fi FileInfo, err error)
 	d, e := os.Stat(dir)
 	switch {
 	case e != nil:
@@ -35,6 +37,7 @@ func dirExists(dir string) bool {
 	return true
 }
 
+// 检测文件是否存在
 func fileExists(dir string) bool {
 	info, err := os.Stat(dir)
 	if err != nil {
@@ -46,6 +49,7 @@ func fileExists(dir string) bool {
 
 // Urlencode is a helper method that converts a map into URL-encoded form data.
 // It is a useful when constructing HTTP POST requests.
+// 对链接地址进行 encode 编码
 func Urlencode(data map[string]string) string {
 	var buf bytes.Buffer
 	for k, v := range data {
@@ -82,6 +86,8 @@ func Slug(s string, sep string) string {
 // NewCookie is a helper method that returns a new http.Cookie object.
 // Duration is specified in seconds. If the duration is zero, the cookie is permanent.
 // This can be used in conjunction with ctx.SetCookie.
+// 创建新的 cookie，返回 http.Cookie 对象。 其中的 age 为cookie 的有效期，以秒计，如果 age 为 0
+// 那么这个 cookie 是永久有效。 NewCookie 可以和 ctx.SetCookie 一起使用
 func NewCookie(name string, value string, age int64) *http.Cookie {
 	var utctime time.Time
 	if age == 0 {

@@ -4,7 +4,7 @@
 // 注意在 Go 中的初始化过程，最先调用的是 import 的包，如果包里面还有其它的 import 包，那么继续递归调用。
 // 直到最底层，在最底层中先初始化 const 变量，然后是 var 变量，再然后是 init 函数。
 // 在这个项目中，作者没有按照前面是变量，后面是方法的方式组织代码，所以项目最开始的部分是先初始化下列变量：
-/* 
+/*
    var contextType reflect.Type
    var defaultStaticDirs []string
 
@@ -14,7 +14,7 @@
        RecoverPanic: true,
    }
 
-   // 声明一个 mainServer 变量，参见 server.go 
+   // 声明一个 mainServer 变量，参见 server.go
    var mainServer = NewServer()
 */
 // 初始化上述变量之后，就是要执行 init() 函数做包的初始化
@@ -54,6 +54,7 @@ type Context struct {
 }
 
 // WriteString writes string data into the response object.
+// 写入数据到响应对象中
 func (ctx *Context) WriteString(content string) {
 	ctx.ResponseWriter.Write([]byte(content))
 }
@@ -69,6 +70,7 @@ func (ctx *Context) Abort(status int, body string) {
 }
 
 // Redirect is a helper method for 3xx redirects.
+// 错误码为 3xx 的重定向处理
 func (ctx *Context) Redirect(status int, url_ string) {
 	ctx.ResponseWriter.Header().Set("Location", url_)
 	ctx.ResponseWriter.WriteHeader(status)
@@ -76,11 +78,13 @@ func (ctx *Context) Redirect(status int, url_ string) {
 }
 
 // Notmodified writes a 304 HTTP response
+// 处理 304 ,如果请求的内容没有修改过，那么使用缓存中的内容
 func (ctx *Context) NotModified() {
 	ctx.ResponseWriter.WriteHeader(304)
 }
 
 // NotFound writes a 404 HTTP response
+// 处理 404 错误码
 func (ctx *Context) NotFound(message string) {
 	ctx.ResponseWriter.WriteHeader(404)
 	ctx.ResponseWriter.Write([]byte(message))
@@ -91,6 +95,8 @@ func (ctx *Context) NotFound(message string) {
 // If the supplied value contains a slash (/) it is set as the Content-Type
 // verbatim. The return value is the content type as it was
 // set, or an empty string if none was found.
+// 设置 HTTP 响应头的 "Content-Type" 值，比如设置 val 为 "json" 那么 Content-Type = "application/json"
+// 如果设置的值中含有 "/" ，那么就直接用这个值作为 Content-Type 的值
 func (ctx *Context) ContentType(val string) string {
 	var ctype string
 	if strings.ContainsRune(val, '/') {
@@ -120,6 +126,7 @@ func (ctx *Context) SetHeader(hdr string, val string, unique bool) {
 }
 
 // SetCookie adds a cookie header to the response.
+// 设置 cookie
 func (ctx *Context) SetCookie(cookie *http.Cookie) {
 	ctx.SetHeader("Set-Cookie", cookie.String(), false)
 }
@@ -217,6 +224,7 @@ func init() {
 }
 
 // Process invokes the main server's routing system.
+// 调用路由系统
 func Process(c http.ResponseWriter, req *http.Request) {
 	mainServer.Process(c, req)
 }
@@ -228,11 +236,14 @@ func Run(addr string) {
 }
 
 // RunTLS starts the web application and serves HTTPS requests for the main server.
+// 运行服务器，使用 HTTPS 请求
 func RunTLS(addr string, config *tls.Config) {
 	mainServer.RunTLS(addr, config)
 }
 
 // RunScgi starts the web application and serves SCGI requests for the main server.
+// SCGI(Simple Common Gateway Interface),简单通用网关接口。是CGI的替代协议，与FastCGI相似，
+// 但更简单。据测试SCGI实现的效率比CGI和FastCGI更高，也更稳定。
 func RunScgi(addr string) {
 	mainServer.RunScgi(addr)
 }
@@ -243,6 +254,7 @@ func RunFcgi(addr string) {
 }
 
 // Close stops the main server.
+// 关闭服务
 func Close() {
 	mainServer.Close()
 }
@@ -277,6 +289,7 @@ func Match(method string, route string, handler interface{}) {
 }
 
 // SetLogger sets the logger for the main server.
+// 自定义 logger
 func SetLogger(logger *log.Logger) {
 	mainServer.Logger = logger
 }
